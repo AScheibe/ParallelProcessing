@@ -44,7 +44,7 @@ int main(int argc, char const *argv[])
 
     fclose(fp_in);
     fclose(fp_out);
-    free(keys);
+    free(lines);
     return 0;   
 }
 
