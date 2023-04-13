@@ -1,6 +1,14 @@
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
 
+typedef struct _thread_data_t {
+    int tid;
+    int low;
+    int high;
+    int num_lines;
+    char** lines;
+} thread_data_t;
 
 int keycmp(char* line1, char* line2){
     char* key1[4];
@@ -32,6 +40,7 @@ void merging(int low, int mid, int high, char** lines, char** lines_ph) {
       lines[i] = lines_ph[i];
 }
 
+// low, high inclusive
 void sort(int low, int high, char** lines, char** lines_ph) {
    int mid;
    
@@ -45,12 +54,75 @@ void sort(int low, int high, char** lines, char** lines_ph) {
    }   
 }
 
-void psort(FILE* fp_in, FILE* fp_out, int num_keys, int num_threads){
+void *sort_thread(void* thr_data) {
+    thread_data_t *data = (thread_data_t*) thr_data;
+    printf("[sort_thread]\ttid: %d\tlow: %d\thigh: %d\n", data->tid, data->low, data->high);
+
+    char** lines_ph = malloc(data->num_lines * sizeof(char*));
+    for(int i = 0; i < data->num_lines; i++){
+        lines_ph[i] = malloc(100 * sizeof(char));
+    }
+
+    sort(data->low, data->high, data->lines, lines_ph);
+
+    free(lines_ph);
+} 
+
+void psort(char** lines, int num_lines, int num_threads){
+    pthread_t threads[num_threads];
+    thread_data_t thr_data[num_threads];
+
+    int rc;
+
+    int chunk_size = num_lines / num_threads;
+
+    /* create threads */
+    for (int i = 0; i < num_threads; ++i) {
+        thr_data[i].tid = i;
+        thr_data[i].lines = lines;
+        thr_data[i].low = i * chunk_size;
+        if (i == num_threads - 1) {
+            thr_data[i].high = num_lines - 1; // high index inclusive
+        } else {
+            thr_data[i].high = (i + 1) * chunk_size - 1; // one below start of next chunk
+        }
+        
+        if ((rc = pthread_create(&threads[i], NULL, sort, &thr_data[i]))) {
+            fprintf(stderr, "error: pthread_create, rc: %d\n", rc);
+            return -1;
+        }
+    }
+    
+    /* block until all threads complete */
+    for (int i = 0; i < num_threads; ++i) {
+        pthread_join(threads[i], NULL);
+    }
+    
+    char** lines_ph = malloc(num_lines * sizeof(char*));
+    for(int i = 0; i < num_lines; i++){
+        lines_ph[i] = malloc(100 * sizeof(char));
+    }
+ 
+    for(int i = 0; i < num_threads - 1; i++){
+        int low = i * chunk_size;
+        int mid = (i + 1) * chunk_size - 1; // one below start of next chunk
+        
+
+        int high = 0;
+
+        if (i == num_threads - 2) {
+            high = num_lines - 1; // high index inclusive
+        } else {
+            high = (i + 2) * chunk_size - 1; // one below start of next chunk
+        }
+
+
+        merging(low, mid, high, lines, lines_ph);
+    }
+
+    free(lines_ph);
 
 }
-
-
-
 
 int main(int argc, char const *argv[])
 {
@@ -59,12 +131,14 @@ int main(int argc, char const *argv[])
         return;
     }
 
-    // create file pointers
+    // read in args
     FILE *fp_in = fopen(argv[1], "r");
     FILE *fp_out = fopen(argv[2], "w+");
 
+    int num_threads = atoi(argv[3]);
+
     // get number of keys/lines in file
-    int num_keys;
+    int num_lines = 0;
     int ch = 0;
 
     while(!feof(fp_in))
@@ -72,20 +146,14 @@ int main(int argc, char const *argv[])
         ch = fgetc(fp_in);
         if(ch == '\n')
         {
-            num_keys++;
+            num_lines++;
         }
     }
 
     // allocate array of lines in file
-    char** lines = malloc(num_keys * sizeof(char*));
-    for(int i = 0; i < num_keys; i++){
+    char** lines = malloc(num_lines * sizeof(char*));
+    for(int i = 0; i < num_lines; i++){
         lines[i] = malloc(100 * sizeof(char));
-    }
-
-    char** lines_ph = malloc(num_keys * sizeof(char*));
-
-    for(int i = 0; i < num_keys; i++){
-        lines_ph[i] = malloc(100 * sizeof(char));
     }
 
     // copy lines in file to array
@@ -97,8 +165,15 @@ int main(int argc, char const *argv[])
         strcpy(lines[i], line);
     }    
 
-    psort();
+    // sort lines
+    psort(lines, num_lines, num_threads);
 
+    // print to output file
+    for(int i = 0; i < num_lines; i++){
+        fprintf(fp_out, "%s\n", lines[i]);
+    }
+
+    fsync();
     fclose(fp_in);
     fclose(fp_out);
     free(lines);
