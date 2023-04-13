@@ -103,22 +103,22 @@ void psort(char** lines, int num_lines, int num_threads){
         lines_ph[i] = malloc(100 * sizeof(char));
     }
  
-    for(int i = 0; i < num_threads - 1; i++){
-        int low = i * chunk_size;
-        int mid = (i + 1) * chunk_size - 1; // one below start of next chunk
+    // for(int i = 0; i < num_threads - 1; i++){
+    //     int low = i * chunk_size;
+    //     int mid = (i + 1) * chunk_size - 1; // one below start of next chunk
         
 
-        int high = 0;
+    //     int high = 0;
 
-        if (i == num_threads - 2) {
-            high = num_lines - 1; // high index inclusive
-        } else {
-            high = (i + 2) * chunk_size - 1; // one below start of next chunk
-        }
+    //     if (i == num_threads - 2) {
+    //         high = num_lines - 1; // high index inclusive
+    //     } else {
+    //         high = (i + 2) * chunk_size - 1; // one below start of next chunk
+    //     }
 
 
-        merging(low, mid, high, lines, lines_ph);
-    }
+    //     merging(low, mid, high, lines, lines_ph);
+    // }
 
     free(lines_ph);
 
