@@ -183,7 +183,7 @@ int main(int argc, char const *argv[])
 
     fclose(fp_in);
 
-    FILE *fp_in = fopen(argv[1], "r");
+    fp_in = fopen(argv[1], "r");
 
     while ((nread = getline(&line, &len, fp_in)) != -1) {
         printf("getline: %s\n", line);
