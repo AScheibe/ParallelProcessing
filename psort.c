@@ -114,12 +114,11 @@ void psort(char** lines, int num_lines, int num_threads){
 
 
         int low = 0;
+        int high = 0;
 
-        for(int i = 0; i < num_threads - 1; i += 2){
+        for(int i = 0; i < num_threads; i += 2){
             int mid = ((i + 1) * chunk_size) - 1; // one below start of next chunk
             
-            int high = 0;
-
             if (i == num_threads) {
                 high = num_lines - 1; // high index inclusive
             } else {
