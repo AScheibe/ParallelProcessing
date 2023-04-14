@@ -72,7 +72,7 @@ void *sort_thread(void* thr_data) {
     pthread_exit(NULL);
 }
 
-int psort(char** lines, int num_lines, int num_threads){
+int parallel_sort(char** lines, int num_lines, int num_threads){
     pthread_t threads[num_threads];
     thread_data_t thr_data[num_threads];
 
@@ -90,7 +90,7 @@ int psort(char** lines, int num_lines, int num_threads){
             lines_ph[i] = malloc(100 * sizeof(char));
         }
 
-        sort(0, num_lines, lines, lines_ph);
+        sort(0, num_lines - 1, lines, lines_ph);
     } else {
         /* create threads */
         for (int i = 0; i < num_threads; ++i) {
@@ -144,12 +144,6 @@ int psort(char** lines, int num_lines, int num_threads){
 
 int main(int argc, char const *argv[])
 {
-    printf("Welcome to psort!\n");
-    if(argc != 4){
-        perror("Invalid Input");
-        exit(EXIT_FAILURE);
-    }
-
     // read in args
     FILE *fp_in = fopen(argv[1], "r");
     FILE *fp_out = fopen(argv[2], "w+");
@@ -187,6 +181,10 @@ int main(int argc, char const *argv[])
     ssize_t nread = 0;
     printf("code was recompiled!");
 
+    fclose(fp_in);
+
+    FILE *fp_in = fopen(argv[1], "r");
+
     while ((nread = getline(&line, &len, fp_in)) != -1) {
         printf("getline: %s\n", line);
         strcpy(lines[i], line);
@@ -200,11 +198,11 @@ int main(int argc, char const *argv[])
     int retval = 0;
 
     // sort lines
-    if (psort(lines, num_lines, num_threads) == 0) {
+    if (parallel_sort(lines, num_lines, num_threads) == 0) {
         printf("psort success!\n");
         // print to output file
         for (int i = 0; i < num_lines; i++){
-            fprintf(fp_out, "%s\n", lines[i]);
+            fprintf(fp_out, "%s", lines[i]);
         }
 
         fsync(fileno(fp_out));
