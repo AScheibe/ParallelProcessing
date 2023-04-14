@@ -76,52 +76,64 @@ void psort(char** lines, int num_lines, int num_threads){
 
     int chunk_size = num_lines / num_threads;
 
-    /* create threads */
-    for (int i = 0; i < num_threads; ++i) {
-        thr_data[i].tid = i;
-        thr_data[i].lines = lines;
-        thr_data[i].low = i * chunk_size;
-        if (i == num_threads - 1) {
-            thr_data[i].high = num_lines - 1; // high index inclusive
-        } else {
-            thr_data[i].high = (i + 1) * chunk_size - 1; // one below start of next chunk
+    if(chunk_size == 0){
+        char** lines_ph = malloc(num_lines * sizeof(char*));
+        for(int i = 0; i < num_lines; i++){
+            lines_ph[i] = malloc(100 * sizeof(char));
+        }
+
+        sort(0, num_lines, lines, lines_ph);
+    } else {
+        /* create threads */
+        for (int i = 0; i < num_threads; ++i) {
+            thr_data[i].tid = i;
+            thr_data[i].lines = lines;
+            thr_data[i].low = i * chunk_size;
+            if (i == num_threads - 1) {
+                thr_data[i].high = num_lines - 1; // high index inclusive
+            } else {
+                thr_data[i].high = (i + 1) * chunk_size - 1; // one below start of next chunk
+            }
+            
+            if ((rc = pthread_create(&threads[i], NULL, sort, &thr_data[i]))) {
+                fprintf(stderr, "error: pthread_create, rc: %d\n", rc);
+                return -1;
+            }
         }
         
-        if ((rc = pthread_create(&threads[i], NULL, sort, &thr_data[i]))) {
-            fprintf(stderr, "error: pthread_create, rc: %d\n", rc);
-            return -1;
+        /* block until all threads complete */
+        for (int i = 0; i < num_threads; ++i) {
+            pthread_join(threads[i], NULL);
         }
-    }
-    
-    /* block until all threads complete */
-    for (int i = 0; i < num_threads; ++i) {
-        pthread_join(threads[i], NULL);
-    }
-    
-    char** lines_ph = malloc(num_lines * sizeof(char*));
-    for(int i = 0; i < num_lines; i++){
-        lines_ph[i] = malloc(100 * sizeof(char));
-    }
- 
-    // for(int i = 0; i < num_threads - 1; i++){
-    //     int low = i * chunk_size;
-    //     int mid = (i + 1) * chunk_size - 1; // one below start of next chunk
         
-
-    //     int high = 0;
-
-    //     if (i == num_threads - 2) {
-    //         high = num_lines - 1; // high index inclusive
-    //     } else {
-    //         high = (i + 2) * chunk_size - 1; // one below start of next chunk
-    //     }
+        char** lines_ph = malloc(num_lines * sizeof(char*));
+        for(int i = 0; i < num_lines; i++){
+            lines_ph[i] = malloc(100 * sizeof(char));
+        }
+    
 
 
-    //     merging(low, mid, high, lines, lines_ph);
-    // }
+        int low = 0;
 
-    free(lines_ph);
+        for(int i = 0; i < num_threads - 1; i += 2){
+            int mid = ((i + 1) * chunk_size) - 1; // one below start of next chunk
+            
+            int high = 0;
 
+            if (i == num_threads) {
+                high = num_lines - 1; // high index inclusive
+            } else {
+                high = (i + 2) * chunk_size - 1; // one below start of next chunk
+            }
+
+
+            merging(low, mid, high, lines, lines_ph);
+
+            low = high;
+        }
+
+        free(lines_ph);
+    }
 }
 
 int main(int argc, char const *argv[])
