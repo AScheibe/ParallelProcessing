@@ -3,6 +3,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <time.h>
 
 typedef struct _thread_data_t {
     int tid;
@@ -11,6 +12,13 @@ typedef struct _thread_data_t {
     int num_lines;
     char** lines;
 } thread_data_t;
+
+
+typedef struct _chunk {
+    int low;
+    int high;
+    struct _chunk* next;
+} chunk_t;
 
 int keycmp(char* line1, char* line2){
     char key1[4];
@@ -23,20 +31,20 @@ int keycmp(char* line1, char* line2){
 }
 
 void merging(int low, int mid, int high, char** lines, char** lines_ph) {
-   int l1, l2, i;
+    int l1, l2, i;
 
-   for(l1 = low, l2 = mid + 1, i = low; l1 <= mid && l2 <= high; i++) {
-      if(keycmp(lines[l1], lines[l2]) <= 0)
-         lines_ph[i] = lines[l1++];
-      else
-         lines_ph[i] = lines[l2++];
-   }
+    for(l1 = low, l2 = mid + 1, i = low; l1 <= mid && l2 <= high; i++) {
+        if(keycmp(lines[l1], lines[l2]) <= 0)
+            lines_ph[i] = lines[l1++];
+        else
+            lines_ph[i] = lines[l2++];
+    }
 
-   while(l1 <= mid)
-      lines_ph[i++] = lines[l1++];
+    while(l1 <= mid)
+        lines_ph[i++] = lines[l1++];
 
-   while(l2 <= high)
-      lines_ph[i++] = lines[l2++];
+    while(l2 <= high)
+        lines_ph[i++] = lines[l2++];
 
    for(i = low; i <= high; i++)
       lines[i] = lines_ph[i];
@@ -58,7 +66,11 @@ void sort(int low, int high, char** lines, char** lines_ph) {
 
 void *sort_thread(void* thr_data) {
     thread_data_t *data = (thread_data_t*) thr_data;
-    printf("[sort_thread]\ttid: %d\tlow: %d\thigh: %d\n", data->tid, data->low, data->high);
+    printf("[sort_thread]\ttid: %d\tlow: %d\thigh: %d\tnum_lines: %d\n",
+        data->tid,
+        data->low,
+        data->high,
+        data->num_lines);
 
     char** lines_ph = malloc(data->num_lines * sizeof(char*));
     for(int i = 0; i < data->num_lines; i++){
@@ -67,12 +79,15 @@ void *sort_thread(void* thr_data) {
 
     sort(data->low, data->high, data->lines, lines_ph);
 
+    // for (int i = 0; i < data->num_lines; i++) {
+    //     free(lines_ph[i]);
+    // }
     free(lines_ph);
 
     pthread_exit(NULL);
 }
 
-int parallel_sort(char** lines, int num_lines, int num_threads){
+int parallel_sort(char** lines, int total_lines, int num_threads){
     pthread_t threads[num_threads];
     thread_data_t thr_data[num_threads];
 
@@ -84,13 +99,18 @@ int parallel_sort(char** lines, int num_lines, int num_threads){
 
     int chunk_size = 0;
 
-    if(num_threads == 0 || (chunk_size = num_lines/num_threads) == 0){
-        char** lines_ph = malloc(num_lines * sizeof(char*));
-        for(int i = 0; i < num_lines; i++){
+    if(num_threads == 0 || (chunk_size = total_lines/num_threads) == 0){
+        char** lines_ph = malloc(total_lines * sizeof(char*));
+        for(int i = 0; i < total_lines; i++){
             lines_ph[i] = malloc(100 * sizeof(char));
         }
 
-        sort(0, num_lines - 1, lines, lines_ph);
+        sort(0, total_lines - 1, lines, lines_ph);
+
+        // for(int i = 0; i < total_lines; i++) {
+        //     free(lines_ph[i]);
+        // }
+        free(lines_ph);
     } else {
         /* create threads */
         for (int i = 0; i < num_threads; ++i) {
@@ -98,10 +118,11 @@ int parallel_sort(char** lines, int num_lines, int num_threads){
             thr_data[i].lines = lines;
             thr_data[i].low = i * chunk_size;
             if (i == num_threads - 1) {
-                thr_data[i].high = num_lines - 1; // high index inclusive
+                thr_data[i].high = total_lines - 1; // high index inclusive
             } else {
                 thr_data[i].high = (i + 1) * chunk_size - 1; // one below start of next chunk
             }
+            thr_data[i].num_lines = thr_data[i].high - thr_data[i].low;
 
             if ((rc = pthread_create(&threads[i], NULL, sort_thread, &thr_data[i]))) {
                 fprintf(stderr, "error: pthread_create, rc: %d\n", rc);
@@ -114,36 +135,66 @@ int parallel_sort(char** lines, int num_lines, int num_threads){
             pthread_join(threads[i], NULL);
         }
 
-        char** lines_ph = malloc(num_lines * sizeof(char*));
-        for(int i = 0; i < num_lines; i++){
+        char** lines_ph = malloc(total_lines * sizeof(char*));
+        for(int i = 0; i < total_lines; i++){
             lines_ph[i] = malloc(100 * sizeof(char));
         }
 
-        int low = 0;
-        int high = 0;
-
-        for(int i = 0; i < num_threads; i += 2){
-            int mid = ((i + 1) * chunk_size) - 1; // one below start of next chunk
-
-            if (i == num_threads) {
-                high = num_lines - 1; // high index inclusive
-            } else {
-                high = (i + 2) * chunk_size - 1; // one below start of next chunk
-            }
-
-
-            merging(low, mid, high, lines, lines_ph);
-
-            low = high;
+        chunk_t* chunk_head = NULL;
+        for (int c = num_threads - 1; c >= 0; c--) {
+            chunk_t* new_node = malloc(sizeof(chunk_t));
+            new_node->low = thr_data[c].low;
+            new_node->high = thr_data[c].high;
+            new_node->next = chunk_head;
+            chunk_head = new_node;
         }
 
-        free(lines_ph);
+
+        // debug print
+        for(chunk_t* c = chunk_head; c != NULL; c = c->next) {
+            printf("chunk: [%d -- %d]\n", c->low, c->high);
+        }
+
+        int num_chunks = num_threads;
+        while (num_chunks > 1) {
+            // [0 1 2 3 4]
+            // chunks = 5
+            // 0+1; 2+3; 4
+            // chunks = 3
+            // 01+23; 4
+            // chunks = 2
+            // 0123+4
+            // chunks = 1
+            // 01234 -> done!
+            for(chunk_t* curr = chunk_head; curr->next != NULL; curr = curr->next) {
+                int low = curr->low;
+                int mid = curr->next->low - 1; // one below start of next chunk
+                int high = curr->next->high; // top of next chunk
+
+                printf("[chunkmerge] curr = %p\n", curr);
+                printf("[chunkmerge] merging chunk %d:%d:%d\n", low, mid, high);
+
+                merging(low, mid, high, lines, lines_ph);
+                curr->high = high;
+                // chunk_t* old = curr->next;
+                curr->next = curr->next->next;
+                // free(old);
+
+                num_chunks--;
+                printf("[chunkmerge] after merging, chunks = %d\n", num_chunks);
+            }
+        }
     }
     return 0;
 }
 
 int main(int argc, char const *argv[])
 {
+    if (argc != 4) {
+        perror("Invalid args!\n");
+        exit(EXIT_FAILURE);
+    }
+
     // read in args
     FILE *fp_in = fopen(argv[1], "r");
     FILE *fp_out = fopen(argv[2], "w+");
@@ -179,27 +230,30 @@ int main(int argc, char const *argv[])
     char* line = NULL;
     int i = 0;
     ssize_t nread = 0;
-    printf("code was recompiled!");
 
     fclose(fp_in);
 
     fp_in = fopen(argv[1], "r");
 
-    while ((nread = getline(&line, &len, fp_in)) != -1) {
-        printf("getline: %s\n", line);
-        strcpy(lines[i], line);
+    while ((nread = getline(&line, &len, fp_in)) != -1 &&
+            i < num_lines) {
+        strncpy(lines[i], line, 100);
         i++;
     }
 
     free(line);
 
-
-
     int retval = 0;
 
-    // sort lines
-    if (parallel_sort(lines, num_lines, num_threads) == 0) {
-        printf("psort success!\n");
+    // sort lines and time
+    clock_t start = clock();
+    clock_t diff;
+
+    int psort_rc = parallel_sort(lines, num_lines, num_threads);
+    diff = clock() - start;
+
+    if (psort_rc == 0) {
+        printf("psort success! Elapsed CPU time: %ld ms\n", diff * 1000 / CLOCKS_PER_SEC);
         // print to output file
         for (int i = 0; i < num_lines; i++){
             fprintf(fp_out, "%s", lines[i]);
@@ -212,6 +266,10 @@ int main(int argc, char const *argv[])
 
     fclose(fp_in);
     fclose(fp_out);
+
+    for (int i = 0; i < num_lines; i++) {
+        free(lines[i]);
+    }
     free(lines);
     return retval;
 }
