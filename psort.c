@@ -4,7 +4,8 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <time.h>
-
+#include <sys/time.h>
+#include <sys/stat.h>
 
 typedef struct _thread_data_t {
     int tid;
@@ -66,6 +67,8 @@ void *sort_thread(void* thr_data) {
     thread_data_t *data = (thread_data_t*) thr_data;
 
     sort(data->low, data->high, data->lines, data->num_lines);
+
+    return NULL;
 }
 
 int parallel_sort(char** lines, int total_lines, int num_threads){
@@ -115,12 +118,6 @@ int parallel_sort(char** lines, int total_lines, int num_threads){
             chunk_head = new_node;
         }
 
-
-        // debug print
-        for(chunk_t* c = chunk_head; c != NULL; c = c->next) {
-            printf("chunk: [%d -- %d]\n", c->low, c->high);
-        }
-
         int num_chunks = num_threads;
         while (num_chunks > 1) {
             // [0 1 2 3 4]
@@ -138,9 +135,6 @@ int parallel_sort(char** lines, int total_lines, int num_threads){
                 int mid = curr->next->low - 1; // one below start of next chunk
                 int high = curr->next->high; // top of next chunk
 
-                printf("[chunkmerge] curr = %p\n", curr);
-                printf("[chunkmerge] merging chunk %d:%d:%d\n", low, mid, high);
-
                 merging(low, mid, high, lines, total_lines);
                 curr->high = high;
                 // chunk_t* old = curr->next;
@@ -148,7 +142,6 @@ int parallel_sort(char** lines, int total_lines, int num_threads){
                 // free(old);
 
                 num_chunks--;
-                printf("[chunkmerge] after merging, chunks = %d\n", num_chunks);
 
                 if(curr->next == NULL){
                     break;
@@ -161,7 +154,8 @@ int parallel_sort(char** lines, int total_lines, int num_threads){
 
 int main(int argc, char const *argv[])
 {
- 
+    struct stat st;
+    struct timeval start_time, end_time;
 
     if (argc != 4) {
         perror("Invalid args!\n");
@@ -183,14 +177,9 @@ int main(int argc, char const *argv[])
     int num_lines = 0;
     int ch = 0;
 
-    while(!feof(fp_in))
-    {
-        ch = fgetc(fp_in);
-        if(ch == '\n')
-        {
-            num_lines++;
-        }
-    }
+    // get num_lines in O(1) -- file size always multiple of 100
+    stat(argv[1], &st);
+    num_lines = st.st_size / 100;
 
     // allocate array of lines in file
     char** lines = malloc(num_lines * sizeof(char*));
@@ -218,15 +207,17 @@ int main(int argc, char const *argv[])
 
     int retval = 0;
 
-    // sort lines and time
-    clock_t start = clock();
-    clock_t diff;
-
+    gettimeofday(&start_time, NULL);
     int psort_rc = parallel_sort(lines, num_lines, num_threads);
-    diff = clock() - start;
+    gettimeofday(&end_time, NULL);
+    long seconds = end_time.tv_sec - start_time.tv_sec;
+    long microseconds = end_time.tv_usec - start_time.tv_usec;
+    double elapsed_time = seconds + (microseconds / 1000000.0);
+
 
     if (psort_rc == 0) {
-        printf("psort success! Elapsed CPU time: %ld ms\n", diff * 1000 / CLOCKS_PER_SEC);
+        printf("Elapsed time: %f seconds\n", elapsed_time);
+
         // print to output file
         for (int i = 0; i < num_lines; i++){
             fprintf(fp_out, "%s", lines[i]);
@@ -245,5 +236,9 @@ int main(int argc, char const *argv[])
     }
 
     free(lines);
+
+
+
+
     return retval;
 }
