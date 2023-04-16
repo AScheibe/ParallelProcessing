@@ -137,9 +137,9 @@ int parallel_sort(char** lines, int total_lines, int num_threads){
 
                 merging(low, mid, high, lines, total_lines);
                 curr->high = high;
-                // chunk_t* old = curr->next;
+                chunk_t* old = curr->next;
                 curr->next = curr->next->next;
-                // free(old);
+                free(old);
 
                 num_chunks--;
 
@@ -236,9 +236,6 @@ int main(int argc, char const *argv[])
     }
 
     free(lines);
-
-
-
 
     return retval;
 }
