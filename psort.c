@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <time.h>
+pthread_mutex_t lock;
 
 typedef struct _thread_data_t {
     int tid;
@@ -20,15 +21,10 @@ typedef struct _chunk {
     struct _chunk* next;
 } chunk_t;
 
-int keycmp(char* line1, char* line2){
-    char key1[4];
-    char key2[4];
-
-    strncpy(key1, line1, 4);
-    strncpy(key2, line2, 4);
-
-    return strcmp(key1, key2);
+int keycmp(const void* a, const void* b) {
+    return *(int*)a - *(int*)b;
 }
+
 
 void merging(int low, int mid, int high, char** lines, char** lines_ph) {
     int l1, l2, i;
@@ -66,11 +62,6 @@ void sort(int low, int high, char** lines, char** lines_ph) {
 
 void *sort_thread(void* thr_data) {
     thread_data_t *data = (thread_data_t*) thr_data;
-    printf("[sort_thread]\ttid: %d\tlow: %d\thigh: %d\tnum_lines: %d\n",
-        data->tid,
-        data->low,
-        data->high,
-        data->num_lines);
 
     char** lines_ph = malloc(data->num_lines * sizeof(char*));
     for(int i = 0; i < data->num_lines; i++){
@@ -82,9 +73,6 @@ void *sort_thread(void* thr_data) {
     // for (int i = 0; i < data->num_lines; i++) {
     //     free(lines_ph[i]);
     // }
-    free(lines_ph);
-
-    pthread_exit(NULL);
 }
 
 int parallel_sort(char** lines, int total_lines, int num_threads){
@@ -122,7 +110,7 @@ int parallel_sort(char** lines, int total_lines, int num_threads){
             } else {
                 thr_data[i].high = (i + 1) * chunk_size - 1; // one below start of next chunk
             }
-            thr_data[i].num_lines = thr_data[i].high - thr_data[i].low;
+            thr_data[i].num_lines = total_lines;
 
             if ((rc = pthread_create(&threads[i], NULL, sort_thread, &thr_data[i]))) {
                 fprintf(stderr, "error: pthread_create, rc: %d\n", rc);
@@ -140,56 +128,18 @@ int parallel_sort(char** lines, int total_lines, int num_threads){
             lines_ph[i] = malloc(100 * sizeof(char));
         }
 
-        chunk_t* chunk_head = NULL;
-        for (int c = num_threads - 1; c >= 0; c--) {
-            chunk_t* new_node = malloc(sizeof(chunk_t));
-            new_node->low = thr_data[c].low;
-            new_node->high = thr_data[c].high;
-            new_node->next = chunk_head;
-            chunk_head = new_node;
-        }
-
-
-        // debug print
-        for(chunk_t* c = chunk_head; c != NULL; c = c->next) {
-            printf("chunk: [%d -- %d]\n", c->low, c->high);
-        }
-
-        int num_chunks = num_threads;
-        while (num_chunks > 1) {
-            // [0 1 2 3 4]
-            // chunks = 5
-            // 0+1; 2+3; 4
-            // chunks = 3
-            // 01+23; 4
-            // chunks = 2
-            // 0123+4
-            // chunks = 1
-            // 01234 -> done!
-            for(chunk_t* curr = chunk_head; curr->next != NULL; curr = curr->next) {
-                int low = curr->low;
-                int mid = curr->next->low - 1; // one below start of next chunk
-                int high = curr->next->high; // top of next chunk
-
-                printf("[chunkmerge] curr = %p\n", curr);
-                printf("[chunkmerge] merging chunk %d:%d:%d\n", low, mid, high);
-
-                merging(low, mid, high, lines, lines_ph);
-                curr->high = high;
-                // chunk_t* old = curr->next;
-                curr->next = curr->next->next;
-                // free(old);
-
-                num_chunks--;
-                printf("[chunkmerge] after merging, chunks = %d\n", num_chunks);
-            }
-        }
+      
     }
     return 0;
 }
 
 int main(int argc, char const *argv[])
 {
+    if (pthread_mutex_init(&lock, NULL) != 0) {
+        printf("\n mutex init has failed\n");
+        return 1;
+    }
+
     if (argc != 4) {
         perror("Invalid args!\n");
         exit(EXIT_FAILURE);
@@ -270,6 +220,7 @@ int main(int argc, char const *argv[])
     for (int i = 0; i < num_lines; i++) {
         free(lines[i]);
     }
+    pthread_mutex_destroy(&lock);
     free(lines);
     return retval;
 }
