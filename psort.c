@@ -106,50 +106,55 @@ int parallel_sort(char** lines, int total_lines, int num_threads){
              pthread_join(threads[i], NULL);
         }
         
-        // chunk_t* chunk_head = NULL;
-        // for (int c = num_threads - 1; c >= 0; c--) {
-        //     chunk_t* new_node = malloc(sizeof(chunk_t));
-        //     new_node->low = thr_data[c].low;
-        //     new_node->high = thr_data[c].high;
-        //     new_node->next = chunk_head;
-        //     chunk_head = new_node;
-        // }
+        chunk_t* chunk_head = NULL;
+        for (int c = num_threads - 1; c >= 0; c--) {
+            chunk_t* new_node = malloc(sizeof(chunk_t));
+            new_node->low = thr_data[c].low;
+            new_node->high = thr_data[c].high;
+            new_node->next = chunk_head;
+            chunk_head = new_node;
+        }
 
 
-        // // debug print
-        // for(chunk_t* c = chunk_head; c != NULL; c = c->next) {
-        //     printf("chunk: [%d -- %d]\n", c->low, c->high);
-        // }
+        // debug print
+        for(chunk_t* c = chunk_head; c != NULL; c = c->next) {
+            printf("chunk: [%d -- %d]\n", c->low, c->high);
+        }
 
-        // int num_chunks = num_threads;
-        // while (num_chunks > 1) {
-        //     // [0 1 2 3 4]
-        //     // chunks = 5
-        //     // 0+1; 2+3; 4
-        //     // chunks = 3
-        //     // 01+23; 4
-        //     // chunks = 2
-        //     // 0123+4
-        //     // chunks = 1
-        //     // 01234 -> done!
-        //     for(chunk_t* curr = chunk_head; curr->next != NULL; curr = curr->next) {
-        //         int low = curr->low;
-        //         int mid = curr->next->low - 1; // one below start of next chunk
-        //         int high = curr->next->high; // top of next chunk
+        int num_chunks = num_threads;
+        while (num_chunks > 1) {
+            // [0 1 2 3 4]
+            // chunks = 5
+            // 0+1; 2+3; 4
+            // chunks = 3
+            // 01+23; 4
+            // chunks = 2
+            // 0123+4
+            // chunks = 1
+            // 01234 -> done!
 
-        //         printf("[chunkmerge] curr = %p\n", curr);
-        //         printf("[chunkmerge] merging chunk %d:%d:%d\n", low, mid, high);
+            for(chunk_t* curr = chunk_head; curr->next != NULL; curr = curr->next) {
+                int low = curr->low;
+                int mid = curr->next->low - 1; // one below start of next chunk
+                int high = curr->next->high; // top of next chunk
 
-        //         merging(low, mid, high, lines, total_lines);
-        //         curr->high = high;
-        //         // chunk_t* old = curr->next;
-        //         curr->next = curr->next->next;
-        //         // free(old);
+                printf("[chunkmerge] curr = %p\n", curr);
+                printf("[chunkmerge] merging chunk %d:%d:%d\n", low, mid, high);
 
-        //         num_chunks--;
-        //         printf("[chunkmerge] after merging, chunks = %d\n", num_chunks);
-        //     }
-        // }
+                merging(low, mid, high, lines, total_lines);
+                curr->high = high;
+                // chunk_t* old = curr->next;
+                curr->next = curr->next->next;
+                // free(old);
+
+                num_chunks--;
+                printf("[chunkmerge] after merging, chunks = %d\n", num_chunks);
+
+                if(curr->next == NULL){
+                    break;
+                }
+            }
+        }
     }
     return 0;
 }
