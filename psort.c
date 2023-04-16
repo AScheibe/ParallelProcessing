@@ -108,7 +108,7 @@ int parallel_sort(char** lines, int total_lines, int num_threads){
         for (int i = 0; i < num_threads; ++i) {
              pthread_join(threads[i], NULL);
         }
-        
+
         chunk_t* chunk_head = NULL;
         for (int c = num_threads - 1; c >= 0; c--) {
             chunk_t* new_node = malloc(sizeof(chunk_t));
@@ -175,11 +175,12 @@ int main(int argc, char const *argv[])
 
     // get number of keys/lines in file
     int num_lines = 0;
-    int ch = 0;
 
     // get num_lines in O(1) -- file size always multiple of 100
     stat(argv[1], &st);
     num_lines = st.st_size / 100;
+    printf("Read %ld bytes from %s\n", st.st_size, argv[1]);
+    printf("Running psort with num_lines = %d\n", num_lines);
 
     // allocate array of lines in file
     char** lines = malloc(num_lines * sizeof(char*));
@@ -205,7 +206,7 @@ int main(int argc, char const *argv[])
 
     free(line);
 
-    int retval = 0;
+    int retval = 1;
 
     gettimeofday(&start_time, NULL);
     int psort_rc = parallel_sort(lines, num_lines, num_threads);
@@ -224,10 +225,15 @@ int main(int argc, char const *argv[])
         }
 
         fsync(fileno(fp_out));
-        retval = 1;
+        retval = 0;
     }
 
-    
+
+    struct stat st_out;
+    stat(argv[2], &st_out);
+    printf("Wrote %ld bytes to %s\n", st_out.st_size, argv[2]);
+
+
     fclose(fp_in);
     fclose(fp_out);
 
