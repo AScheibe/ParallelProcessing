@@ -26,35 +26,37 @@ int keycmp(const void* a, const void* b) {
 }
 
 
-void merging(int low, int mid, int high, char** lines, char** lines_ph) {
+void merging(int low, int mid, int high, char** lines, int num_lines) {
+    char* lines_ph2[num_lines];
+
     int l1, l2, i;
 
     for(l1 = low, l2 = mid + 1, i = low; l1 <= mid && l2 <= high; i++) {
         if(keycmp(lines[l1], lines[l2]) <= 0)
-            lines_ph[i] = lines[l1++];
+            lines_ph2[i] = lines[l1++];
         else
-            lines_ph[i] = lines[l2++];
+            lines_ph2[i] = lines[l2++];
     }
 
     while(l1 <= mid)
-        lines_ph[i++] = lines[l1++];
+        lines_ph2[i++] = lines[l1++];
 
     while(l2 <= high)
-        lines_ph[i++] = lines[l2++];
+        lines_ph2[i++] = lines[l2++];
 
     for(i = low; i <= high; i++)
-        lines[i] = lines_ph[i];
+        lines[i] = lines_ph2[i];
 }
 
 // low, high inclusive
-void sort(int low, int high, char** lines, char** lines_ph) {
+void sort(int low, int high, char** lines, int num_lines) {
    int mid;
 
    if(low < high) {
       mid = (low + high) / 2;
-      sort(low, mid, lines, lines_ph);
-      sort(mid+1, high, lines, lines_ph);
-      merging(low, mid, high, lines, lines_ph);
+      sort(low, mid, lines, num_lines);
+      sort(mid+1, high, lines, num_lines);
+      merging(low, mid, high, lines, num_lines);
    } else {
       return;
    }
@@ -63,16 +65,7 @@ void sort(int low, int high, char** lines, char** lines_ph) {
 void *sort_thread(void* thr_data) {
     thread_data_t *data = (thread_data_t*) thr_data;
 
-    char** lines_ph = malloc(data->num_lines * sizeof(char*));
-    for(int i = 0; i < data->num_lines; i++){
-        lines_ph[i] = malloc(100 * sizeof(char));
-    }
-
-    sort(data->low, data->high, data->lines, lines_ph);
-
-    // for (int i = 0; i < data->num_lines; i++) {
-    //     free(lines_ph[i]);
-    // }
+    sort(data->low, data->high, data->lines, data->num_lines);
 }
 
 int parallel_sort(char** lines, int total_lines, int num_threads){
@@ -88,17 +81,7 @@ int parallel_sort(char** lines, int total_lines, int num_threads){
     int chunk_size = 0;
 
     if(num_threads == 0 || (chunk_size = total_lines/num_threads) == 0){
-        char** lines_ph = malloc(total_lines * sizeof(char*));
-        for(int i = 0; i < total_lines; i++){
-            lines_ph[i] = malloc(100 * sizeof(char));
-        }
-
-        sort(0, total_lines - 1, lines, lines_ph);
-
-        for(int i = 0; i < total_lines; i++) {
-          free(lines_ph[i]);
-        }
-        free(lines_ph);
+        sort(0, total_lines - 1, lines, total_lines);
     } else {
         /* create threads */
         for (int i = 0; i < num_threads; ++i) {
@@ -120,57 +103,53 @@ int parallel_sort(char** lines, int total_lines, int num_threads){
 
         /* block until all threads complete */
         for (int i = 0; i < num_threads; ++i) {
-            pthread_join(threads[i], NULL);
+             pthread_join(threads[i], NULL);
         }
-
-        char** lines_ph = malloc(total_lines * sizeof(char*));
-        for(int i = 0; i < total_lines; i++){
-            lines_ph[i] = malloc(100 * sizeof(char));
-        }
-                chunk_t* chunk_head = NULL;
-        for (int c = num_threads - 1; c >= 0; c--) {
-            chunk_t* new_node = malloc(sizeof(chunk_t));
-            new_node->low = thr_data[c].low;
-            new_node->high = thr_data[c].high;
-            new_node->next = chunk_head;
-            chunk_head = new_node;
-        }
+        
+        // chunk_t* chunk_head = NULL;
+        // for (int c = num_threads - 1; c >= 0; c--) {
+        //     chunk_t* new_node = malloc(sizeof(chunk_t));
+        //     new_node->low = thr_data[c].low;
+        //     new_node->high = thr_data[c].high;
+        //     new_node->next = chunk_head;
+        //     chunk_head = new_node;
+        // }
 
 
-        // debug print
-        for(chunk_t* c = chunk_head; c != NULL; c = c->next) {
-            printf("chunk: [%d -- %d]\n", c->low, c->high);
-        }
+        // // debug print
+        // for(chunk_t* c = chunk_head; c != NULL; c = c->next) {
+        //     printf("chunk: [%d -- %d]\n", c->low, c->high);
+        // }
 
-        int num_chunks = num_threads;
-        while (num_chunks > 1) {
-            // [0 1 2 3 4]
-            // chunks = 5
-            // 0+1; 2+3; 4
-            // chunks = 3
-            // 01+23; 4
-            // chunks = 2
-            // 0123+4
-            // chunks = 1
-            // 01234 -> done!
-            for(chunk_t* curr = chunk_head; curr->next != NULL; curr = curr->next) {
-                int low = curr->low;
-                int mid = curr->next->low - 1; // one below start of next chunk
-                int high = curr->next->high; // top of next chunk
+        // int num_chunks = num_threads;
+        // while (num_chunks > 1) {
+        //     // [0 1 2 3 4]
+        //     // chunks = 5
+        //     // 0+1; 2+3; 4
+        //     // chunks = 3
+        //     // 01+23; 4
+        //     // chunks = 2
+        //     // 0123+4
+        //     // chunks = 1
+        //     // 01234 -> done!
+        //     for(chunk_t* curr = chunk_head; curr->next != NULL; curr = curr->next) {
+        //         int low = curr->low;
+        //         int mid = curr->next->low - 1; // one below start of next chunk
+        //         int high = curr->next->high; // top of next chunk
 
-                printf("[chunkmerge] curr = %p\n", curr);
-                printf("[chunkmerge] merging chunk %d:%d:%d\n", low, mid, high);
+        //         printf("[chunkmerge] curr = %p\n", curr);
+        //         printf("[chunkmerge] merging chunk %d:%d:%d\n", low, mid, high);
 
-                merging(low, mid, high, lines, lines_ph);
-                curr->high = high;
-                // chunk_t* old = curr->next;
-                curr->next = curr->next->next;
-                // free(old);
+        //         merging(low, mid, high, lines, total_lines);
+        //         curr->high = high;
+        //         // chunk_t* old = curr->next;
+        //         curr->next = curr->next->next;
+        //         // free(old);
 
-                num_chunks--;
-                printf("[chunkmerge] after merging, chunks = %d\n", num_chunks);
-            }
-        }
+        //         num_chunks--;
+        //         printf("[chunkmerge] after merging, chunks = %d\n", num_chunks);
+        //     }
+        // }
     }
     return 0;
 }
