@@ -44,11 +44,11 @@ int keycmp(kvpair_t* a, kvpair_t* b) {
 
 
 void merging(int low, int mid, int high, kvpair_t** lines, int num_lines) {
-    kvpair_t* lines_ph2[num_lines];
+    kvpair_t* lines_ph2[high - low + 1];
 
     int l1, l2, i;
 
-    for(l1 = low, l2 = mid + 1, i = low; l1 <= mid && l2 <= high; i++) {
+    for(l1 = low, l2 = mid + 1, i = 0; l1 <= mid && l2 <= high; i++) {
         if(keycmp(lines[l1], lines[l2]) <= 0)
             lines_ph2[i] = lines[l1++];
         else
@@ -62,7 +62,7 @@ void merging(int low, int mid, int high, kvpair_t** lines, int num_lines) {
         lines_ph2[i++] = lines[l2++];
 
     for(i = low; i <= high; i++)
-        lines[i] = lines_ph2[i];
+        lines[i] = lines_ph2[i - low];
 }
 
 // low, high inclusive
