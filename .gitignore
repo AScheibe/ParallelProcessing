@@ -3,3 +3,7 @@ psort
 test.img
 p6_tests.log
 testout
+test*
+p6_tests.sh
+r*
+.__afsE419
