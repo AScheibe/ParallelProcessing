@@ -30,6 +30,14 @@ typedef struct _chunk {
     struct _chunk* next;
 } chunk_t;
 
+typedef struct _merge_data_t {
+    int low;
+    int mid;
+    int high;
+    kvpair_t** lines;
+    int num_lines;
+} merge_data_t;
+
 int keycmp(kvpair_t* a, kvpair_t* b) {
     return a->key - b->key;
 }
@@ -76,6 +84,13 @@ void *sort_thread(void* thr_data) {
 
     sort(data->low, data->high, data->lines, data->num_lines);
 
+    return NULL;
+}
+
+void *merge_thread(void* arg) {
+    merge_data_t *data = (merge_data_t*) arg;
+    printf("[merge_thread] %d:%d:%d\n", data->low, data->mid, data->high);
+    merging(data->low, data->mid, data->high, data->lines, data->num_lines);
     return NULL;
 }
 
@@ -127,6 +142,10 @@ int parallel_sort(kvpair_t **lines, int total_lines, int num_threads){
         }
 
         int num_chunks = num_threads;
+        pthread_t merge_threads[num_threads];
+        merge_data_t mdata[num_threads];
+        int k;
+
         while (num_chunks > 1) {
             // [0 1 2 3 4]
             // chunks = 5
@@ -138,22 +157,37 @@ int parallel_sort(kvpair_t **lines, int total_lines, int num_threads){
             // chunks = 1
             // 01234 -> done!
 
+            k = 0;
+            printf("chunkmerge iteration\n");
             for(chunk_t* curr = chunk_head; curr->next != NULL; curr = curr->next) {
                 int low = curr->low;
                 int mid = curr->next->low - 1; // one below start of next chunk
                 int high = curr->next->high; // top of next chunk
 
-                merging(low, mid, high, lines, total_lines);
+                mdata[k] = (merge_data_t) { low, mid, high, lines, total_lines };
+
+                if (pthread_create(&merge_threads[k], NULL, merge_thread, &mdata[k])) {
+                    perror("pthread_create mergethread");
+                    return -1;
+                }
+                
+                // coalesce chunks
                 curr->high = high;
                 chunk_t* old = curr->next;
                 curr->next = curr->next->next;
-                free(old);
+                free(old); // free unused chunk data
 
                 num_chunks--;
 
                 if(curr->next == NULL){
                     break;
                 }
+                k++;
+            }
+            
+            // wait for all merge threads to complete in current iteration
+            for (int j = 0; j < k; j++) {
+                pthread_join(merge_threads[k], NULL);
             }
         }
     }
