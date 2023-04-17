@@ -178,16 +178,18 @@ int parallel_sort(kvpair_t **lines, int total_lines, int num_threads){
                 free(old); // free unused chunk data
 
                 num_chunks--;
-
+                k++;
                 if(curr->next == NULL){
                     break;
                 }
-                k++;
+
             }
+            printf("k = %d\n", k);
             
             // wait for all merge threads to complete in current iteration
             for (int j = 0; j < k; j++) {
-                pthread_join(merge_threads[k], NULL);
+                printf("waiting on thread %d\n", j);
+                pthread_join(merge_threads[j], NULL);
             }
         }
     }
