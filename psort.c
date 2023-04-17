@@ -89,7 +89,7 @@ void *sort_thread(void* thr_data) {
 
 void *merge_thread(void* arg) {
     merge_data_t *data = (merge_data_t*) arg;
-    printf("[merge_thread] %d:%d:%d\n", data->low, data->mid, data->high);
+    //printf("[merge_thread] %d:%d:%d\n", data->low, data->mid, data->high);
     merging(data->low, data->mid, data->high, data->lines, data->num_lines);
     return NULL;
 }
@@ -158,7 +158,7 @@ int parallel_sort(kvpair_t **lines, int total_lines, int num_threads){
             // 01234 -> done!
 
             k = 0;
-            printf("chunkmerge iteration\n");
+            //printf("chunkmerge iteration\n");
             for(chunk_t* curr = chunk_head; curr->next != NULL; curr = curr->next) {
                 int low = curr->low;
                 int mid = curr->next->low - 1; // one below start of next chunk
@@ -184,11 +184,11 @@ int parallel_sort(kvpair_t **lines, int total_lines, int num_threads){
                 }
 
             }
-            printf("k = %d\n", k);
+            //printf("k = %d\n", k);
             
             // wait for all merge threads to complete in current iteration
             for (int j = 0; j < k; j++) {
-                printf("waiting on thread %d\n", j);
+                //printf("waiting on thread %d\n", j);
                 pthread_join(merge_threads[j], NULL);
             }
         }
@@ -262,14 +262,25 @@ int main(int argc, char const *argv[])
     if (psort_rc == 0) {
         printf("Elapsed time: %f seconds, num_lines = %d\n", elapsed_time, num_lines);
 
+        char* out = (char*) mmap(0, st.st_size, PROT_WRITE, MAP_SHARED, fileno(fp_out), 0);
+        if (out == MAP_FAILED) {
+            perror("out mmap failed");
+            exit(EXIT_FAILURE);
+        }
+        char* out_entry = out;
+
         // print to output file
         for (int i = 0; i < num_lines; i++){
             //printf("output entry: %s\n\n", entries[i]->value);
-            fwrite(entries[i]->value, 1, 100, fp_out);
-            //fprintf(fp_out, "%s", entries[i]->value);
+            //printf("i = %d\n", i);
+            fwrite(entries[i]->value, 1, RECORD_SIZE, fp_out);
+            //memcpy(out_entry, garbage, RECORD_SIZE);
+            out_entry += RECORD_SIZE;
         }
+        //msync(out, st.st_size, MS_SYNC);
         fflush(fp_out);
         fsync(fileno(fp_out));
+        munmap(out, st.st_size);
         retval = 0;
     }
 
