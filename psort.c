@@ -6,13 +6,21 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
+
+#define RECORD_SIZE 100
+
+typedef struct _kvpair {
+    int key;
+    char* value;
+} kvpair_t;
 
 typedef struct _thread_data_t {
     int tid;
     int low;
     int high;
     int num_lines;
-    char** lines;
+    kvpair_t** lines;
 } thread_data_t;
 
 
@@ -22,13 +30,13 @@ typedef struct _chunk {
     struct _chunk* next;
 } chunk_t;
 
-int keycmp(const void* a, const void* b) {
-    return *(int*)a - *(int*)b;
+int keycmp(kvpair_t* a, kvpair_t* b) {
+    return a->key - b->key;
 }
 
 
-void merging(int low, int mid, int high, char** lines, int num_lines) {
-    char* lines_ph2[num_lines];
+void merging(int low, int mid, int high, kvpair_t** lines, int num_lines) {
+    kvpair_t* lines_ph2[num_lines];
 
     int l1, l2, i;
 
@@ -50,7 +58,7 @@ void merging(int low, int mid, int high, char** lines, int num_lines) {
 }
 
 // low, high inclusive
-void sort(int low, int high, char** lines, int num_lines) {
+void sort(int low, int high, kvpair_t** lines, int num_lines) {
    int mid;
 
    if(low < high) {
@@ -71,7 +79,7 @@ void *sort_thread(void* thr_data) {
     return NULL;
 }
 
-int parallel_sort(char** lines, int total_lines, int num_threads){
+int parallel_sort(kvpair_t **lines, int total_lines, int num_threads){
     pthread_t threads[num_threads];
     thread_data_t thr_data[num_threads];
 
@@ -178,38 +186,37 @@ int main(int argc, char const *argv[])
 
     // get num_lines in O(1) -- file size always multiple of 100
     stat(argv[1], &st);
-    num_lines = st.st_size / 100;
+    num_lines = st.st_size / RECORD_SIZE;
     printf("Read %ld bytes from %s\n", st.st_size, argv[1]);
     printf("Running psort with num_lines = %d\n", num_lines);
 
-    // allocate array of lines in file
-    char** lines = malloc(num_lines * sizeof(char*));
-    for(int i = 0; i < num_lines; i++){
-        lines[i] = malloc(100 * sizeof(char));
+    // mmap file
+
+    int i = 0;
+    char *data;
+
+    data = (char*) mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fileno(fp_in), 0);
+    if (data == MAP_FAILED) {
+        perror("mapping failed");
+        exit(EXIT_FAILURE);
     }
 
-    // copy lines in file to array
-    size_t len = 0;
-    char* line = NULL;
-    int i = 0;
-    ssize_t nread = 0;
+    // allocate array of kvpair entries
 
-    fclose(fp_in);
-
-    fp_in = fopen(argv[1], "r");
-
-    while ((nread = getline(&line, &len, fp_in)) != -1 &&
-            i < num_lines) {
-        strncpy(lines[i], line, 100);
+    kvpair_t **entries = (kvpair_t**)malloc(num_lines * sizeof(kvpair_t*));
+    for (char *line = data; line < data + st.st_size; line += 100) {
+        // printf("mallocing entry: key = %c %c %c %c, line = %p\n", line[0], line[1], line[2], line[3], line);
+        kvpair_t* new_pair = (kvpair_t*)malloc(sizeof(kvpair_t));
+        new_pair->key = *((int*)line);
+        new_pair->value = line;
+        entries[i] = new_pair;
         i++;
     }
-
-    free(line);
 
     int retval = 1;
 
     gettimeofday(&start_time, NULL);
-    int psort_rc = parallel_sort(lines, num_lines, num_threads);
+    int psort_rc = parallel_sort(entries, num_lines, num_threads);
     gettimeofday(&end_time, NULL);
     long seconds = end_time.tv_sec - start_time.tv_sec;
     long microseconds = end_time.tv_usec - start_time.tv_usec;
@@ -217,13 +224,15 @@ int main(int argc, char const *argv[])
 
 
     if (psort_rc == 0) {
-        printf("Elapsed time: %f seconds\n", elapsed_time);
+        printf("Elapsed time: %f seconds, num_lines = %d\n", elapsed_time, num_lines);
 
         // print to output file
         for (int i = 0; i < num_lines; i++){
-            fprintf(fp_out, "%s", lines[i]);
+            //printf("output entry: %s\n\n", entries[i]->value);
+            fwrite(entries[i]->value, 1, 100, fp_out);
+            //fprintf(fp_out, "%s", entries[i]->value);
         }
-
+        fflush(fp_out);
         fsync(fileno(fp_out));
         retval = 0;
     }
@@ -233,15 +242,8 @@ int main(int argc, char const *argv[])
     stat(argv[2], &st_out);
     printf("Wrote %ld bytes to %s\n", st_out.st_size, argv[2]);
 
-
     fclose(fp_in);
     fclose(fp_out);
-
-    for (int i = 0; i < num_lines; i++) {
-        free(lines[i]);
-    }
-
-    free(lines);
 
     return retval;
 }

@@ -1,2 +1,2 @@
 all:
-	gcc psort.c -Wall -Werror -pthread -o psort
+	gcc psort.c -O -Wall -Werror -pthread -o psort
