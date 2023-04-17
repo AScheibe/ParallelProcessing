@@ -44,7 +44,7 @@ int keycmp(kvpair_t* a, kvpair_t* b) {
 
 
 void merging(int low, int mid, int high, kvpair_t** lines, int num_lines) {
-    kvpair_t* lines_ph2[high - low + 1];
+    kvpair_t** lines_ph2 = malloc((high - low + 1) * sizeof(kvpair_t*));
 
     int l1, l2, i;
 
@@ -63,6 +63,8 @@ void merging(int low, int mid, int high, kvpair_t** lines, int num_lines) {
 
     for(i = low; i <= high; i++)
         lines[i] = lines_ph2[i - low];
+
+    free(lines_ph2);
 }
 
 // low, high inclusive
@@ -262,25 +264,12 @@ int main(int argc, char const *argv[])
     if (psort_rc == 0) {
         printf("Elapsed time: %f seconds, num_lines = %d\n", elapsed_time, num_lines);
 
-        char* out = (char*) mmap(0, st.st_size, PROT_WRITE, MAP_SHARED, fileno(fp_out), 0);
-        if (out == MAP_FAILED) {
-            perror("out mmap failed");
-            exit(EXIT_FAILURE);
-        }
-        char* out_entry = out;
-
         // print to output file
         for (int i = 0; i < num_lines; i++){
-            //printf("output entry: %s\n\n", entries[i]->value);
-            //printf("i = %d\n", i);
             fwrite(entries[i]->value, 1, RECORD_SIZE, fp_out);
-            //memcpy(out_entry, garbage, RECORD_SIZE);
-            out_entry += RECORD_SIZE;
         }
-        //msync(out, st.st_size, MS_SYNC);
         fflush(fp_out);
         fsync(fileno(fp_out));
-        munmap(out, st.st_size);
         retval = 0;
     }
 
